@@ -1,0 +1,47 @@
+.cv-container {
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  
+  .accordion-item {
+    border-bottom: 1px solid #ddd;
+    padding: 1rem 0;
+    overflow: hidden;
+  }
+  
+  .accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: color 0.3s ease;
+  }
+  .accordion-header h3 {
+    margin: 0;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 1.3rem;
+    transition: transform 0.3s ease;
+  }
+  .accordion-header:hover h3 {
+    transform: scale(1.05);
+  }
+  
+  .accordion-icon {
+    font-size: 1.5rem;
+    margin-left: 1rem;
+  }
+  
+  .accordion-content {
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.5s ease, opacity 0.5s ease;
+    overflow: hidden;
+    margin-top: 0;
+    padding-left: 1rem;
+  }
+  .accordion-content.open {
+    opacity: 1;
+    max-height: 500px; /* sufficiently large to accommodate content */
+    margin-top: 0.5rem;
+  }
+  
