@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Reset Database</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.8/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.8/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.8/firebase-auth-compat.js"></script>
+    <script>
+        // Your Firebase config (same as in your app)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCqXaUSpNcHnYHjjCG8SWfuXbxZB_mUYyY",
+            authDomain: "gender-support-likes.firebaseapp.com",
+            databaseURL: "https://gender-support-likes-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "gender-support-likes",
+            storageBucket: "gender-support-likes.firebasestorage.app",
+            messagingSenderId: "528393993613",
+            appId: "1:528393993613:web:2be2d79d9fcf46099791c4",
+            measurementId: "G-QYF3ZMDNEH"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        async function resetDatabase() {
+            try {
+                document.getElementById('status').textContent = "Resetting database...";
+                
+                // Remove old data
+                await db.ref('totalCounts').remove();
+                await db.ref('verifiedCounts').remove();
+                await db.ref('userVotes').remove();
+                await db.ref('newsletter').remove();
+                await db.ref('supportLikes').remove(); // Old format
+                await db.ref('firstAidLikes').remove(); // Old format
+                
+                // Initialize fresh counters
+                await db.ref('totalCounts').set({
+                    supportLikes: 0,
+                    firstAidLikes: 0
+                });
+                
+                await db.ref('verifiedCounts').set({
+                    supportLikes: 0,
+                    firstAidLikes: 0
+                });
+                
+                document.getElementById('status').textContent = "Database reset complete!";
+                document.getElementById('status').style.color = "green";
+            } catch (error) {
+                document.getElementById('status').textContent = "Error: " + error.message;
+                document.getElementById('status').style.color = "red";
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Database Reset Tool</h1>
+    <p>This will reset all counts and email lists to start fresh.</p>
+    <button onclick="resetDatabase()">Reset Database</button>
+    <p id="status"></p>
+</body>
+</html>

@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { FaInstagram, FaTwitter, FaYoutube, FaLinkedin, FaEnvelope, FaFacebook, FaHeart, FaMedkit, FaGoogle } from 'react-icons/fa';
 import { ref, onValue, set, get, increment } from "firebase/database";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { db, auth, googleProvider } from './firebaseConfig';
 import './App.css';
+import NovaXPage from './NovaXPage';
 
-function App() {
+function MainPage() {
   const [showCV, setShowCV] = useState(false);
-  const [showNX, setShowNX] = useState(false);
   const [supportCount, setSupportCount] = useState(0);
   const [firstAidCount, setFirstAidCount] = useState(0);
   const [verifiedSupportCount, setVerifiedSupportCount] = useState(0);
@@ -240,10 +241,6 @@ function App() {
     setShowCV(!showCV);
   };
 
-  const toggleNX = () => {
-    setShowNX(!showNX);
-  };
-
   return (
     <div className="app">
       {/* Support Buttons */}
@@ -294,9 +291,9 @@ function App() {
         <a href="mailto:dr.med.baharnalbant@gmail.com">
           <FaEnvelope />
         </a>
-        <a href="#" onClick={(e) => { e.preventDefault(); toggleNX(); }} className="nx-button">
+        <Link to="/novax" className="nx-button">
           NX
-        </a>
+        </Link>
       </div>
 
       {/* Main Content */}
@@ -353,6 +350,9 @@ function App() {
               Licensed in Emergency Medicine
             </p>
             <p>
+              ACLS-Instructor / ITLS-Instructor
+            </p>
+            <p>
               Medical Consulting
             </p>
             <p>
@@ -391,24 +391,6 @@ function App() {
             </p>
             <p>
               Member of the Selection Committee of the German Academic Scholarship Foundation (Studienstiftung des Deutschen Volkes)
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* NX Modal */}
-      {showNX && (
-        <div className="nx-modal">
-          <div className="nx-modal-content">
-            <button className="nx-close-button" onClick={toggleNX}>Close</button>
-            <h2>NovaX – The Shape of Futurism.</h2>
-            <p>
-              NovaX is dedicated to shaping the future. The mission is to redefine the boundaries of technology, medicine, and science while developing groundbreaking solutions.
-            </p>
-            
-            <h3>Vision</h3>
-            <p>
-              By developing innovative products and concepts, NovaX lays the foundation for a new era of progress. Technological advancements enable a more efficient, healthier, and sustainable future, where the boundaries between humans, technology, and the environment continue to merge.
             </p>
           </div>
         </div>
@@ -507,6 +489,17 @@ function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<MainPage />} />
+        <Route path="/novax" element={<NovaXPage />} />
+      </Routes>
+    </Router>
   );
 }
 
