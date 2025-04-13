@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FaInstagram, FaTwitter, FaYoutube, FaLinkedin, FaEnvelope, FaFacebook, FaHeart, FaMedkit, FaGoogle } from 'react-icons/fa';
-import { ref, onValue, set, get } from "firebase/database";
+import { ref, onValue, set, get, increment } from "firebase/database";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { db, auth, googleProvider } from './firebaseConfig';
 import './App.css';
@@ -10,49 +10,65 @@ function App() {
   const [showNX, setShowNX] = useState(false);
   const [supportCount, setSupportCount] = useState(0);
   const [firstAidCount, setFirstAidCount] = useState(0);
+  const [verifiedSupportCount, setVerifiedSupportCount] = useState(0);
+  const [verifiedFirstAidCount, setVerifiedFirstAidCount] = useState(0);
   const [user, setUser] = useState(null);
   const [hasLiked, setHasLiked] = useState(false);
   const [hasLikedFirstAid, setHasLikedFirstAid] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showVoteOptionsModal, setShowVoteOptionsModal] = useState(false);
   const [pendingVoteType, setPendingVoteType] = useState(null);
   const [loadingVote, setLoadingVote] = useState(false);
+  const [newsletterConsent, setNewsletterConsent] = useState(false);
 
   // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       
-      // If we have a user and a pending vote, process it
+      // If we have a user and a pending vote, process it as verified vote
       if (currentUser && pendingVoteType) {
-        if (pendingVoteType === 'gender') {
-          processVote('gender');
-        } else if (pendingVoteType === 'firstAid') {
-          processVote('firstAid');
-        }
+        processVerifiedVote(pendingVoteType, newsletterConsent);
         setPendingVoteType(null);
       }
     });
 
     return () => unsubscribe();
-  }, [pendingVoteType]);
+  }, [pendingVoteType, newsletterConsent]);
 
   // Subscribe to the like counts from Firebase and check user votes
   useEffect(() => {
-    // Gender Medicine support count
-    const countRef = ref(db, 'supportLikes');
-    onValue(countRef, (snapshot) => {
+    // Total votes counters
+    const supportRef = ref(db, 'totalCounts/supportLikes');
+    onValue(supportRef, (snapshot) => {
       const data = snapshot.val();
       if (data !== null) {
         setSupportCount(data);
       }
     });
 
-    // First Aid support count
-    const firstAidRef = ref(db, 'firstAidLikes');
+    const firstAidRef = ref(db, 'totalCounts/firstAidLikes');
     onValue(firstAidRef, (snapshot) => {
       const data = snapshot.val();
       if (data !== null) {
         setFirstAidCount(data);
+      }
+    });
+
+    // Verified votes counters
+    const verifiedSupportRef = ref(db, 'verifiedCounts/supportLikes');
+    onValue(verifiedSupportRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        setVerifiedSupportCount(data);
+      }
+    });
+
+    const verifiedFirstAidRef = ref(db, 'verifiedCounts/firstAidLikes');
+    onValue(verifiedFirstAidRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data !== null) {
+        setVerifiedFirstAidCount(data);
       }
     });
 
@@ -62,29 +78,36 @@ function App() {
 
   // Check if user has already voted on either button
   const checkUserVotes = async () => {
+    // Check local storage for anonymous votes
+    const anonymousGenderVote = localStorage.getItem("anonymousGenderVote") === "true";
+    const anonymousFirstAidVote = localStorage.getItem("anonymousFirstAidVote") === "true";
+    
     if (user) {
-      // Check gender medicine vote
+      // Check verified votes if user is logged in
       const genderVoteRef = ref(db, `userVotes/gender/${user.uid}`);
       const genderSnapshot = await get(genderVoteRef);
-      setHasLiked(genderSnapshot.exists());
-
-      // Check first aid vote
+      
       const firstAidVoteRef = ref(db, `userVotes/firstAid/${user.uid}`);
       const firstAidSnapshot = await get(firstAidVoteRef);
-      setHasLikedFirstAid(firstAidSnapshot.exists());
+      
+      setHasLiked(genderSnapshot.exists() || anonymousGenderVote);
+      setHasLikedFirstAid(firstAidSnapshot.exists() || anonymousFirstAidVote);
     } else {
-      setHasLiked(false);
-      setHasLikedFirstAid(false);
+      // Set based on localStorage for anonymous users
+      setHasLiked(anonymousGenderVote);
+      setHasLikedFirstAid(anonymousFirstAidVote);
     }
   };
 
   // Handle login
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
       setShowLoginModal(false);
+      return result.user;
     } catch (error) {
       console.error("Error signing in with Google", error);
+      return null;
     }
   };
 
@@ -97,60 +120,120 @@ function App() {
     }
   };
 
-  // Process the vote after successful authentication
-  const processVote = async (voteType) => {
+  // Process anonymous vote
+  const processAnonymousVote = async (voteType) => {
+    if (loadingVote) return;
+    
+    setLoadingVote(true);
+    
+    try {
+      // Update the appropriate counter
+      if (voteType === 'gender' && !hasLiked) {
+        const countRef = ref(db, 'totalCounts/supportLikes');
+        await set(countRef, increment(1));
+        localStorage.setItem("anonymousGenderVote", "true");
+        setHasLiked(true);
+      } else if (voteType === 'firstAid' && !hasLikedFirstAid) {
+        const countRef = ref(db, 'totalCounts/firstAidLikes');
+        await set(countRef, increment(1));
+        localStorage.setItem("anonymousFirstAidVote", "true");
+        setHasLikedFirstAid(true);
+      }
+    } catch (error) {
+      console.error("Error processing anonymous vote", error);
+    } finally {
+      setLoadingVote(false);
+      setShowVoteOptionsModal(false);
+    }
+  };
+
+  // Process verified vote with Google auth
+  const processVerifiedVote = async (voteType, subscribeToNewsletter) => {
     if (!user || loadingVote) return;
     
     setLoadingVote(true);
     
     try {
       if (voteType === 'gender' && !hasLiked) {
-        // Increment gender medicine counter
-        const newCount = supportCount + 1;
-        const countRef = ref(db, 'supportLikes');
-        await set(countRef, newCount);
+        // Update total counter
+        const totalCountRef = ref(db, 'totalCounts/supportLikes');
+        await set(totalCountRef, increment(1));
+        
+        // Update verified counter
+        const verifiedCountRef = ref(db, 'verifiedCounts/supportLikes');
+        await set(verifiedCountRef, increment(1));
         
         // Record user's vote
         const userVoteRef = ref(db, `userVotes/gender/${user.uid}`);
         await set(userVoteRef, {
           email: user.email,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          newsletter: subscribeToNewsletter
         });
+        
+        // If user wants newsletter, add to newsletter list
+        if (subscribeToNewsletter) {
+          const newsletterRef = ref(db, `newsletter/${user.uid}`);
+          await set(newsletterRef, {
+            email: user.email,
+            timestamp: Date.now()
+          });
+        }
         
         setHasLiked(true);
       } else if (voteType === 'firstAid' && !hasLikedFirstAid) {
-        // Increment first aid counter
-        const newCount = firstAidCount + 1;
-        const countRef = ref(db, 'firstAidLikes');
-        await set(countRef, newCount);
+        // Update total counter
+        const totalCountRef = ref(db, 'totalCounts/firstAidLikes');
+        await set(totalCountRef, increment(1));
+        
+        // Update verified counter
+        const verifiedCountRef = ref(db, 'verifiedCounts/firstAidLikes');
+        await set(verifiedCountRef, increment(1));
         
         // Record user's vote
         const userVoteRef = ref(db, `userVotes/firstAid/${user.uid}`);
         await set(userVoteRef, {
           email: user.email,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          newsletter: subscribeToNewsletter
         });
+        
+        // If user wants newsletter, add to newsletter list
+        if (subscribeToNewsletter) {
+          const newsletterRef = ref(db, `newsletter/${user.uid}`);
+          await set(newsletterRef, {
+            email: user.email,
+            timestamp: Date.now()
+          });
+        }
         
         setHasLikedFirstAid(true);
       }
     } catch (error) {
-      console.error("Error processing vote", error);
+      console.error("Error processing verified vote", error);
     } finally {
       setLoadingVote(false);
+      setShowVoteOptionsModal(false);
     }
   };
 
   // Handle like button click
   const handleLike = (voteType) => {
-    if (!user) {
-      // If not logged in, show login modal and set pending vote
-      setPendingVoteType(voteType);
-      setShowLoginModal(true);
-      return;
-    }
+    // Set pending vote type and show options modal
+    setPendingVoteType(voteType);
+    setShowVoteOptionsModal(true);
+  };
+
+  const handleVerifiedVote = async () => {
+    setShowVoteOptionsModal(false);
     
-    // If already logged in, process the vote directly
-    processVote(voteType);
+    // If user is already logged in, process vote directly
+    if (user) {
+      processVerifiedVote(pendingVoteType, newsletterConsent);
+    } else {
+      // Show login modal
+      setShowLoginModal(true);
+    }
   };
 
   const toggleCV = () => {
@@ -331,12 +414,86 @@ function App() {
         </div>
       )}
 
+      {/* Vote Options Modal */}
+      {showVoteOptionsModal && (
+        <div className="vote-options-modal">
+          <div className="vote-options-modal-content">
+            <h2>Vote Options</h2>
+            <p>How would you like to cast your vote?</p>
+            
+            <div className="vote-options">
+              <div className="vote-option">
+                <h3>Verified Vote</h3>
+                <p>Your vote will count for project funding initiatives and will be verified with your Google account.</p>
+                
+                {user ? (
+                  <div className="newsletter-option">
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        checked={newsletterConsent}
+                        onChange={(e) => setNewsletterConsent(e.target.checked)}
+                      />
+                      I'd like to receive email updates about future initiatives
+                    </label>
+                  </div>
+                ) : null}
+                
+                <button 
+                  className="verified-vote-button" 
+                  onClick={handleVerifiedVote}
+                >
+                  {user ? "Submit Verified Vote" : "Sign in with Google & Vote"}
+                </button>
+              </div>
+              
+              <div className="vote-option-divider">
+                <span>OR</span>
+              </div>
+              
+              <div className="vote-option">
+                <h3>Anonymous Vote</h3>
+                <p>Your vote will be counted in the total but will not be verified for project funding purposes.</p>
+                <button 
+                  className="anonymous-vote-button" 
+                  onClick={() => processAnonymousVote(pendingVoteType)}
+                >
+                  Vote Anonymously
+                </button>
+              </div>
+            </div>
+            
+            <button 
+              className="vote-options-cancel-button" 
+              onClick={() => {
+                setShowVoteOptionsModal(false);
+                setPendingVoteType(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Login Modal */}
       {showLoginModal && (
         <div className="login-modal">
           <div className="login-modal-content">
-            <h2>Authentication Required</h2>
-            <p>Please log in with your Google account to verify your support. Your vote will be counted once after authentication.</p>
+            <h2>Sign in to Verify Your Vote</h2>
+            <p>Please log in with your Google account to verify your support. Your vote will be counted as verified once you're authenticated.</p>
+            
+            <div className="newsletter-option">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={newsletterConsent}
+                  onChange={(e) => setNewsletterConsent(e.target.checked)}
+                />
+                I'd like to receive email updates about future initiatives
+              </label>
+            </div>
+            
             <button className="google-login-button" onClick={handleLogin}>
               <FaGoogle /> Sign in with Google
             </button>
